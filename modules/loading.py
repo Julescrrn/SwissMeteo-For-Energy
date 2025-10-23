@@ -246,6 +246,10 @@ def load_meteo_file(config, is_verbose=False):
             meteo_global[station_id] = meteo[station_id]*station['weight']
     meteo['global'] = pd.concat(meteo_global.values(), axis=1).groupby(level=0, axis=1).sum()
     data = concat_stations_horizontal(meteo, exclude_keys=None)
+    # Save a csv of the stations data and their wieght
+    station_csv = pd.DataFrame.from_dict(station_to_canton, orient='index').reset_index()
+    station_csv.rename(columns={'index': 'Name'}, inplace=True)
+    station_csv.to_csv('./data/station_weight.csv', index=False, encoding='utf-8-sig')
     # Remove columns that contain only NaN values
     data = data.dropna(axis=1, how='all')
     return data
@@ -281,7 +285,7 @@ def compute_station_weights():
 
     Examples
     --------
-    >>> from weight.matching import compute_station_weights
+    >>> from modules.loading import compute_station_weights
     >>> station_weights = compute_station_weights()
     >>> round(station_weights['Sion']['weight'], 5)
     0.00342
@@ -379,7 +383,7 @@ def download_meteo_file(station_id, start_date, end_date, freq, is_verbose=False
             period = k.split("_")[-1].replace(".csv", "")
             start, end = period.split("-")
             return int(start) <= int(end_date[:4]) and int(end) >= int(start_date[:4])
-        return "recent" in k
+        return False
 
     selected_files = {k: v for k, v in relevant_files.items() if file_in_range(k)}
 
@@ -449,9 +453,17 @@ def concat_meteo_items(files_dict, variables=None, is_verbose=False):
     # Concatenate and clean
     full_df = pd.concat(all_data, ignore_index=True)
     if "reference_timestamp" in full_df.columns:
+        try:
+            full_df["reference_timestamp"] = pd.to_datetime(
+            full_df["reference_timestamp"],
+            format="%Y-%m-%dT%H:%M:%S")
+        except Exception:
+            full_df["reference_timestamp"] = pd.to_datetime(
+            full_df["reference_timestamp"],
+            format="%d.%m.%Y %H:%M")
         full_df["reference_timestamp"] = pd.to_datetime(full_df["reference_timestamp"], errors="coerce")
         full_df = full_df.dropna(subset=["reference_timestamp"])
-        full_df = full_df.sort_values("reference_timestamp").drop_duplicates(subset="reference_timestamp")
+        #full_df = full_df.sort_values("reference_timestamp").drop_duplicates(subset="reference_timestamp")
         full_df = full_df.set_index("reference_timestamp")
 
     if is_verbose:
